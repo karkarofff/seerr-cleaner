@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-jellyseerr-cleaner — Nettoyage des medias fantomes dans Jellyseerr.
+seerr-cleaner — Nettoyage des medias fantomes dans Seerr.
+
+COMPATIBILITE
+Concu pour Seerr (le successeur unifie d'Overseerr et Jellyseerr, sorti en
+2026). Fonctionne aussi avec les instances Jellyseerr encore en place :
+l'API /api/v1 est identique. Necessite une bibliotheque Jellyfin — les
+instances Seerr configurees avec Plex ne sont pas supportees.
 
 PROBLEME RESOLU
-Quand on supprime un film ou une serie dans Radarr/Sonarr, Jellyseerr garde
+Quand on supprime un film ou une serie dans Radarr/Sonarr, Seerr garde
 l'entree en base. Le contenu continue d'apparaitre comme "Demande" ou
 "Disponible" dans l'interface. Ce script detecte ces entrees fantomes et
 permet de les effacer (equivalent du bouton "Clear Media Data" de Seerr,
@@ -23,20 +29,16 @@ ailleurs : le serveur n'ecoute que sur 127.0.0.1.
 SECURITE
 - Radarr / Sonarr / Jellyfin : lecture seule (GET). Jamais modifies.
 - Aucun fichier video n'est jamais supprime.
-- Seul appel destructif : DELETE /api/v1/media/{id} sur Jellyseerr.
+- Seul appel destructif : DELETE /api/v1/media/{id} sur Seerr.
 - Un backup JSON est ecrit avant chaque suppression.
 - config.json reste en local. NE PAS le commit (voir .gitignore).
 - Le scan s'interrompt si une source renvoie une bibliotheque vide.
-
-PORTEE
-Teste avec Jellyseerr + Jellyfin + Radarr + Sonarr.
-Overseerr et Plex ne sont PAS supportes.
 
 Licence MIT. Fourni sans garantie : verifie ce que tu supprimes.
 
 Usage :
     pip install requests
-    python jellyseerr_cleaner.py
+    python seerr_cleaner.py
 """
 
 import json
@@ -143,8 +145,8 @@ def test_endpoint(kind, url, key):
     url = url.rstrip("/")
     try:
         if kind == "seerr":
-            get_json(url, "/api/v1/status", {"X-Api-Key": key}, label="Jellyseerr")
-            return True, "Jellyseerr OK"
+            get_json(url, "/api/v1/status", {"X-Api-Key": key}, label="Seerr")
+            return True, "Seerr OK"
         if kind == "radarr":
             d = get_json(url, "/api/v3/movie", {"X-Api-Key": key}, label="Radarr")
             return True, f"Radarr OK — {len(d)} films"
@@ -220,7 +222,7 @@ def fetch_seerr_media():
     out, skip, take = [], 0, 100
     while True:
         d = get_json(url, "/api/v1/media", h,
-                     params={"take": take, "skip": skip}, label="Jellyseerr")
+                     params={"take": take, "skip": skip}, label="Seerr")
         res = d.get("results", [])
         out.extend(res)
         total = d.get("pageInfo", {}).get("results", len(out))
@@ -228,7 +230,7 @@ def fetch_seerr_media():
         if skip >= total or not res:
             break
     if not out:
-        raise ScanError("Jellyseerr ne renvoie aucun media.")
+        raise ScanError("Seerr ne renvoie aucun media.")
     return out
 
 
@@ -366,7 +368,7 @@ def read_backup(name):
 
 
 def rerequest_media(entry):
-    """Recree une demande dans Jellyseerr (POST /api/v1/request).
+    """Recree une demande dans Seerr (POST /api/v1/request).
     NB : ne restaure PAS le fichier — recree seulement la demande, comme si
     un utilisateur cliquait 'Demander'. Utile uniquement si le media existe
     encore quelque part et qu'on a efface l'entree Seerr par erreur."""
@@ -405,7 +407,7 @@ def rerequest_media(entry):
 
 CONFIG_PAGE = r"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
-<title>Jellyseerr Cleaner — Configuration</title>
+<title>Seerr Cleaner — Configuration</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f8cff'/><g stroke='%23fff' stroke-width='2' stroke-linecap='round' fill='none'><path d='M21 7 L13 15'/><path d='M13 15 L10 18 L14 22 L17 19 Z' fill='%23fff' stroke='none'/><path d='M10 22 L8 26 M13 23 L12 27 M16 23 L16 27'/></g></svg>">
 <style>
   :root { --bg:#12151c; --card:#1b1f2a; --line:#2a3040; --txt:#e6e9f0;
@@ -455,12 +457,12 @@ CONFIG_PAGE = r"""<!DOCTYPE html>
     sur cette machine uniquement. Rien n'est envoye ailleurs.</div>
 
   <div class="sec">
-    <h2>Jellyseerr</h2>
+    <h2>Seerr</h2>
     <div class="hint">Cle API : Parametres &rarr; General &rarr; Cle API. URL sans slash final.</div>
     <label>URL</label>
-    <input id="seerr_url" placeholder="https://jellyseerr.exemple.com">
+    <input id="seerr_url" placeholder="https://seerr.exemple.com">
     <label>Cle API</label>
-    <input id="seerr_key" placeholder="cle API Jellyseerr">
+    <input id="seerr_key" placeholder="cle API Seerr">
     <button class="test" data-kind="seerr">Tester la connexion</button>
     <div class="result" id="r_seerr"></div>
   </div>
@@ -575,7 +577,7 @@ document.getElementById('save').onclick = async () => {
   };
   if (!cfg.seerr.url || !cfg.seerr.key || !cfg.jellyfin.url || !cfg.jellyfin.key
       || !cfg.radarr.length || !cfg.sonarr.length) {
-    alert('Il manque des champs : Jellyseerr, Jellyfin, et au moins une '
+    alert('Il manque des champs : Seerr, Jellyfin, et au moins une '
         + 'instance Radarr et une Sonarr sont requis.');
     return;
   }
@@ -595,7 +597,7 @@ document.getElementById('save').onclick = async () => {
 
 MAIN_PAGE = r"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
-<title>Jellyseerr Cleaner</title>
+<title>Seerr Cleaner</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f8cff'/><g stroke='%23fff' stroke-width='2' stroke-linecap='round' fill='none'><path d='M21 7 L13 15'/><path d='M13 15 L10 18 L14 22 L17 19 Z' fill='%23fff' stroke='none'/><path d='M10 22 L8 26 M13 23 L12 27 M16 23 L16 27'/></g></svg>">
 <style>
   :root { --bg:#12151c; --card:#1b1f2a; --line:#2a3040; --txt:#e6e9f0;
@@ -698,7 +700,7 @@ MAIN_PAGE = r"""<!DOCTYPE html>
              font-size:12.5px; padding:10px 13px; border-radius:8px; margin-bottom:16px; }
 </style></head><body>
 <header>
-  <h1>Jellyseerr Cleaner</h1>
+  <h1>Seerr Cleaner</h1>
   <div class="tabs">
     <button class="tab active" id="tab_clean" onclick="showTab('clean')">Nettoyage</button>
     <button class="tab" id="tab_hist" onclick="showTab('hist')">Historique</button>
@@ -723,7 +725,7 @@ MAIN_PAGE = r"""<!DOCTYPE html>
 <main>
   <div id="view_clean">
     <div id="warn"></div>
-    <div id="out" class="msg">Interrogation de Radarr, Sonarr, Jellyfin et Jellyseerr...</div>
+    <div id="out" class="msg">Interrogation de Radarr, Sonarr, Jellyfin et Seerr...</div>
   </div>
   <div id="view_hist" style="display:none">
     <div id="hist_out" class="msg">Chargement de l'historique...</div>
@@ -757,7 +759,7 @@ function render() {
     list.length === DATA.length ? `${DATA.length} affiche(s)` : `${list.length} / ${DATA.length} affiche(s)`;
   if (!list.length) {
     out.className = 'msg';
-    out.textContent = DATA.length ? 'Aucun resultat pour ce filtre.' : 'Aucun media fantome. Ton Jellyseerr est propre.';
+    out.textContent = DATA.length ? 'Aucun resultat pour ce filtre.' : 'Aucun media fantome. Ton Seerr est propre.';
     sync(); return;
   }
   out.className = 'grid';
@@ -789,7 +791,7 @@ document.getElementById('none').onclick = () => { SEL.clear(); render(); };
 document.getElementById('go').onclick = async () => {
   const picked = [...SEL].map(i => DATA.find(o => o.id === i));
   const risky = picked.filter(o => o.status !== 'DELETED');
-  let msg = `Effacer ${picked.length} entree(s) de Jellyseerr ?\n\n` +
+  let msg = `Effacer ${picked.length} entree(s) de Seerr ?\n\n` +
     picked.slice(0,12).map(o => `- ${o.title} [${o.status}]`).join('\n') +
     (picked.length > 12 ? `\n... et ${picked.length-12} autres` : '');
   if (risky.length)
@@ -823,7 +825,7 @@ fetch('/api/scan').then(r => r.json()).then(d => {
   const si = s.sonarr_instances > 1 ? ` (${s.sonarr_instances} inst.)` : '';
   document.getElementById('stats').innerHTML =
     `Radarr <b>${s.radarr}</b>${ri} &middot; Sonarr <b>${s.sonarr}</b>${si} &middot; ` +
-    `Jellyfin <b>${s.jellyfin}</b> &middot; Jellyseerr <b>${s.seerr}</b> &mdash; ` +
+    `Jellyfin <b>${s.jellyfin}</b> &middot; Seerr <b>${s.seerr}</b> &mdash; ` +
     `<b>${s.ghosts}</b> fantome(s), ${s.kept} conserve(s)`;
   document.getElementById('bar').style.display = 'flex';
   const counts = {};
@@ -890,9 +892,9 @@ async function openBackup(file) {
       <div class="modal">
         <div class="mh"><h2>Nettoyage du ${fmtDate(d.deleted_at)}</h2>
           <button class="x" onclick="closeModal()">&times;</button></div>
-        <div class="msub">${entries.length} entree(s) supprimee(s) de Jellyseerr</div>
+        <div class="msub">${entries.length} entree(s) supprimee(s) de Seerr</div>
         <div class="re-note"><b>Redemander</b> ne restaure pas le fichier : ca recree
-          seulement une demande dans Jellyseerr, comme si tu cliquais &laquo; Demander &raquo;.
+          seulement une demande dans Seerr, comme si tu cliquais &laquo; Demander &raquo;.
           Utile uniquement si le media existe encore quelque part et que tu l'as
           efface par erreur.</div>
         <div id="drows"></div>
@@ -962,7 +964,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = run_scan()
                 s = data["stats"]
                 print(f"  Radarr {s['radarr']} - Sonarr {s['sonarr']} - "
-                      f"Jellyfin {s['jellyfin']} - Jellyseerr {s['seerr']} "
+                      f"Jellyfin {s['jellyfin']} - Seerr {s['seerr']} "
                       f"=> {s['ghosts']} fantomes")
             except ScanError as e:
                 print(f"  ERREUR : {e}")
@@ -1012,7 +1014,7 @@ if __name__ == "__main__":
     load_config()
     url = f"http://127.0.0.1:{PORT}"
     configured = config_is_complete()
-    print(f"\n  Jellyseerr Cleaner — interface sur {url}")
+    print(f"\n  Seerr Cleaner — interface sur {url}")
     if not configured:
         print("  Premiere utilisation : configure tes URL et cles dans le navigateur.")
     print("  (Ctrl+C pour quitter)\n")
