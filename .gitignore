@@ -1,0 +1,14 @@
+# Config locale avec les cles API — NE JAMAIS COMMITTER
+config.json
+config.local.*
+*.local.py
+
+# Backups generes avant suppression
+backups/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
