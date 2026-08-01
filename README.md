@@ -1,5 +1,7 @@
 # Seerr Cleaner
 
+**Français** · [English](README.en.md)
+
 Interface web locale pour nettoyer les **médias fantômes** dans Seerr.
 
 > **Compatibilité** — Conçu pour [Seerr](https://docs.seerr.dev/), le successeur unifié d'Overseerr et Jellyseerr. Fonctionne aussi avec les instances **Jellyseerr** encore en place : l'API `/api/v1` est identique. Nécessite une bibliothèque **Jellyfin** — les instances configurées avec Plex ne sont pas supportées.
