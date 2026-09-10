@@ -47,6 +47,27 @@ Where to find the API keys:
 
 URLs must have **no trailing slash**. If your apps sit behind a reverse proxy with a subpath (`https://server.com/radarr`), include the subpath.
 
+## Terminal / cron mode
+
+Scan without a browser (never deletes anything):
+
+```bash
+python seerr_cleaner.py --scan-only          # readable report
+python seerr_cleaner.py --scan-only --json   # JSON output
+```
+
+Exit codes: `0` = no ghosts, `1` = ghosts found, `2` = error.
+Handy in a cron job to get alerted when ghosts appear — deletion always stays a manual decision in the UI.
+
+## Docker
+
+```bash
+docker build -t seerr-cleaner .
+docker run -d --name seerr-cleaner -p 8765:8765 -v ./data:/data seerr-cleaner
+```
+
+UI at `http://server-ip:8765` — configuration and backups are persisted in `./data`.
+
 ## How a ghost is identified
 
 A media entry is flagged **only** if it is:
