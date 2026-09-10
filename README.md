@@ -45,6 +45,23 @@ Où trouver les clés API :
 
 Les URL sont **sans slash final**. Si tes applications sont derrière un reverse proxy avec un sous-chemin (`https://serveur.com/radarr`), inclus le sous-chemin.
 
+## Mode terminal / cron
+
+Scanner sans navigateur (ne supprime jamais rien) :
+
+    python seerr_cleaner.py --scan-only          # rapport lisible
+    python seerr_cleaner.py --scan-only --json   # sortie JSON
+
+Codes retour : 0 = aucun fantôme, 1 = fantômes trouvés, 2 = erreur.
+Pratique en cron pour être alerté quand des fantômes apparaissent.
+
+## Docker
+
+    docker build -t seerr-cleaner .
+    docker run -d --name seerr-cleaner -p 8765:8765 -v ./data:/data seerr-cleaner
+
+Interface sur http://IP-du-serveur:8765 — config et backups persistés dans `./data`.
+
 ## Comment un média est identifié comme fantôme
 
 Un média est signalé **uniquement** s'il est :
