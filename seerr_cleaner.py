@@ -43,6 +43,7 @@ Usage :
 
 import json
 import os
+import sys
 import threading
 import time
 import webbrowser
@@ -57,10 +58,16 @@ import requests
 # =====================================================================
 
 PORT = 8765
+# 0.0.0.0 pour Docker / acces distant : SEERR_CLEANER_HOST=0.0.0.0
+BIND_HOST = os.environ.get("SEERR_CLEANER_HOST", "127.0.0.1")
 TIMEOUT = 30
 WORKERS = 6
 CONFIG_FILE = "config.json"
-BACKUP_DIR = "backups"
+# Dossier des donnees (config + backups). Par defaut : a cote du script.
+# Docker / autre emplacement : SEERR_CLEANER_DATA=/data
+DATA_DIR = (os.environ.get("SEERR_CLEANER_DATA")
+            or os.path.dirname(os.path.abspath(__file__)))
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 
 # =====================================================================
 
@@ -83,7 +90,7 @@ class ScanError(Exception):
 # ---------------------------------------------------------------------
 
 def config_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
+    return os.path.join(DATA_DIR, CONFIG_FILE)
 
 
 def load_config():
@@ -272,7 +279,11 @@ def run_scan():
                 kept += 1
                 continue
         elif mtype == "tv":
-            if not tvdb or tvdb in sonarr or tvdb in jf_tvdb:
+            # Jellyfin ne renseigne pas toujours l'id Tvdb sur les series
+            # (selon les agents de metadonnees) : on verifie AUSSI par Tmdb
+            # pour eviter de classer fantome une serie bien presente.
+            if (not tvdb or tvdb in sonarr or tvdb in jf_tvdb
+                    or (tmdb and tmdb in jf_tmdb)):
                 kept += 1
                 continue
         else:
@@ -943,6 +954,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _origin_ok(self):
+        """Anti-CSRF : un site web ouvert dans le navigateur peut envoyer
+        des POST 'a l'aveugle' vers 127.0.0.1. Les navigateurs joignent
+        toujours l'en-tete Origin aux POST inter-sites : s'il est present
+        et ne correspond pas a notre propre adresse, on refuse. Les outils
+        hors navigateur (curl, cron) n'envoient pas d'Origin et passent."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        host = self.headers.get("Host", "")
+        return origin in (f"http://{host}", f"https://{host}")
+
     def _json_body(self):
         n = int(self.headers.get("Content-Length", 0))
         return json.loads(self.rfile.read(n)) if n else {}
@@ -985,6 +1008,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"404", "text/plain")
 
     def do_POST(self):
+        if not self._origin_ok():
+            self._send(403, b"Origine refusee", "text/plain")
+            return
         if self.path == "/api/test":
             b = self._json_body()
             ok, msg = test_endpoint(b.get("kind"), b.get("url", ""), b.get("key", ""))
@@ -1010,8 +1036,50 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"404", "text/plain")
 
 
-if __name__ == "__main__":
+def scan_only(as_json):
+    """Mode cron/terminal : scanne et rapporte, ne supprime jamais.
+    Codes retour : 0 = aucun fantome, 1 = fantomes trouves, 2 = erreur."""
     load_config()
+    if not config_is_complete():
+        print("Configuration incomplete : lance d'abord le script sans "
+              "argument pour la faire dans le navigateur.")
+        sys.exit(2)
+    try:
+        res = run_scan()
+    except ScanError as e:
+        print(f"Erreur de scan : {e}")
+        sys.exit(2)
+    if as_json:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+    else:
+        s = res["stats"]
+        print(f"Radarr : {s['radarr']} | Sonarr : {s['sonarr']} | "
+              f"Jellyfin : {s['jellyfin']} | Seerr : {s['seerr']}")
+        print(f"Fantomes : {s['ghosts']}")
+        for g in res["ghosts"]:
+            y = f" ({g['year']})" if g.get("year") else ""
+            print(f"  - [{g['type']}] {g.get('title', '?')}{y}  "
+                  f"seerr_id={g['id']}")
+    sys.exit(1 if res["ghosts"] else 0)
+
+
+if __name__ == "__main__":
+    if "--scan-only" in sys.argv:
+        scan_only("--json" in sys.argv)
+
+    load_config()
+    server = None
+    for p in range(PORT, PORT + 10):
+        try:
+            server = HTTPServer((BIND_HOST, p), Handler)
+            PORT = p
+            break
+        except OSError:
+            continue
+    if server is None:
+        print(f"Impossible d'ouvrir un port entre {PORT} et {PORT + 9} "
+              f"(deja utilises ?). Ferme l'instance existante et relance.")
+        sys.exit(2)
     url = f"http://127.0.0.1:{PORT}"
     configured = config_is_complete()
     print(f"\n  Seerr Cleaner — interface sur {url}")
@@ -1021,6 +1089,6 @@ if __name__ == "__main__":
     threading.Timer(1.0, lambda: webbrowser.open(
         url if configured else url + "/config")).start()
     try:
-        HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+        server.serve_forever()
     except KeyboardInterrupt:
         print("\n  Arret.\n")
