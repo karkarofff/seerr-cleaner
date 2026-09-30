@@ -161,7 +161,7 @@ def test_endpoint(kind, url, key):
             d = get_json(url, "/api/v3/series", {"X-Api-Key": key}, label="Sonarr")
             return True, f"Sonarr OK — {len(d)} series"
         if kind == "jellyfin":
-            d = get_json(url, "/Users", {"X-Emby-Token": key}, label="Jellyfin")
+            d = get_json(url, "/Users", {"Authorization": f'MediaBrowser Token="{key}"'}, label="Jellyfin")
             return True, f"Jellyfin OK — {len(d)} utilisateur(s)"
     except ScanError as e:
         return False, str(e)
@@ -192,7 +192,7 @@ def fetch_arr(instances, endpoint, id_field, label):
 
 def fetch_jellyfin():
     url = CONFIG["jellyfin"]["url"].rstrip("/")
-    h = {"X-Emby-Token": CONFIG["jellyfin"]["key"]}
+    h = {"Authorization": f'MediaBrowser Token="{CONFIG["jellyfin"]["key"]}"'}
     users = get_json(url, "/Users", h, label="Jellyfin")
     if not users:
         raise ScanError("Jellyfin : aucun utilisateur trouve. Cle API invalide ?")
